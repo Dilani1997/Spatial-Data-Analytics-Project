@@ -73,3 +73,25 @@ def normalize_questions(frame):
         axis=1,
     )
     return frame
+
+def dataset_diagnostics(frame):
+    text_columns = [
+        "question_en", "question_zh", "gold_code", "notes", "expected_output",
+    ]
+    missing = {
+        column: int(frame[column].astype(str).str.strip().eq("").sum())
+        for column in text_columns
+    }
+    return {
+        "rows": len(frame),
+        "duplicate_ids": int(frame["qid"].duplicated().sum()),
+        "missing": missing,
+        "scenario_count": int(frame["scenario"].nunique()),
+        "task_count": int(frame["task"].nunique()),
+        "bilingual_complete": int(
+            (
+                frame["question_en"].astype(str).str.strip().ne("")
+                & frame["question_zh"].astype(str).str.strip().ne("")
+            ).sum()
+        ),
+    }
