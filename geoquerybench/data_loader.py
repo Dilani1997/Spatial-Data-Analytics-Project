@@ -47,4 +47,22 @@ def normalize_questions(frame):
     if frame["qid"].duplicated().any():
         duplicates = frame.loc[frame["qid"].duplicated(), "qid"].unique().tolist()
         raise ValueError(f"Duplicate question IDs found: {', '.join(duplicates[:10])}")
+
+    defaults = {
+        "scenario": "Uncategorised", "qtype": "Unknown", "qtype_name": "Unknown",
+        "task": "unknown", "difficulty": "unknown", "question_en": "",
+        "question_zh": "", "gold_code": "", "notes": "",
+        "rewrite_source": "", "expected_output": "",
+    }
+    for column, default in defaults.items():
+        if column not in frame.columns:
+            frame[column] = default
+        frame[column] = frame[column].fillna(default)
+
+    # At least one language must contain the question text.
+    no_question = frame["question_en"].astype(str).str.strip().eq("") & frame[
+        "question_zh"
+    ].astype(str).str.strip().eq("")
+    if no_question.any():
+        raise ValueError(f"{int(no_question.sum())} rows contain neither English nor Chinese question text.")
     return frame
