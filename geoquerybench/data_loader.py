@@ -65,4 +65,11 @@ def normalize_questions(frame):
     ].astype(str).str.strip().eq("")
     if no_question.any():
         raise ValueError(f"{int(no_question.sum())} rows contain neither English nor Chinese question text.")
+    frame["commodity_tags"] = frame.apply(
+        lambda item: commodity_tags(
+            item["question_en"], item["question_zh"], item["gold_code"],
+            item["notes"], item["qtype_name"],
+        ),
+        axis=1,
+    )
     return frame
