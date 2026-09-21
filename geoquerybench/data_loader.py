@@ -95,3 +95,8 @@ def dataset_diagnostics(frame):
             ).sum()
         ),
     }
+
+@st.cache_data
+def load_questions(path, modified_time):
+    del modified_time  # Included in the cache key so replacing the file refreshes the app.
+    return normalize_questions(pd.read_csv(path, encoding="utf-8-sig"))
