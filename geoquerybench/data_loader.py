@@ -100,3 +100,104 @@ def dataset_diagnostics(frame):
 def load_questions(path, modified_time):
     del modified_time  # Included in the cache key so replacing the file refreshes the app.
     return normalize_questions(pd.read_csv(path, encoding="utf-8-sig"))
+
+
+# --- Expanded 824-question workspace helpers (2026-09 update) ---
+EXPANDED_REQUIRED_COLUMNS = ("qid", "question_en", "question_zh", "gold_code")
+DEFAULT_RESULT_EXTENSIONS = frozenset({".csv", ".txt", ".json", ".geojson", ".png", ".jpg", ".jpeg"})
+
+
+def load_expanded_questions(path):
+    """Load the client expanded bilingual dataset using the stricter live-workspace rules.
+
+    Unlike the legacy normalizer, the expanded dataset requires both English and Chinese
+    question text for every row and preserves all source columns as strings.
+    """
+    frame = pd.read_csv(path, dtype=str, keep_default_na=False, encoding="utf-8-sig")
+    lowered = {str(column).strip().lower(): column for column in frame.columns}
+    rename_map = {}
+    for canonical, aliases in COLUMN_ALIASES.items():
+        if canonical in frame.columns:
+            continue
+        for alias in aliases:
+            key = alias.lower()
+            if key in lowered:
+                rename_map[lowered[key]] = canonical
+                break
+    frame = frame.rename(columns=rename_map)
+    missing = [column for column in EXPANDED_REQUIRED_COLUMNS if column not in frame.columns]
+    if missing:
+        raise ValueError("Missing columns: " + ", ".join(missing))
+
+    frame["qid"] = frame["qid"].astype(str).str.strip()
+    if frame["qid"].eq("").any() or frame["qid"].duplicated().any():
+        raise ValueError("Missing or duplicate question IDs: fix the supplied CSV before reviewing.")
+    if frame["question_en"].astype(str).str.strip().eq("").any() or frame[
+        "question_zh"
+    ].astype(str).str.strip().eq("").any():
+        raise ValueError("Every expanded case must contain English and Chinese text.")
+    return frame
+
+
+def load_gold_manifest(gold_dir):
+    """Return qid -> safe result filename from `_manifest.csv` when available."""
+    gold_dir = Path(gold_dir).resolve()
+    path = gold_dir / "_manifest.csv"
+    if not path.is_file():
+        return {}
+    frame = pd.read_csv(path, dtype=str, keep_default_na=False, encoding="utf-8-sig")
+    id_col = next((c for c in frame if str(c).lower() in {"qid", "question_id", "id"}), None)
+    file_col = next(
+        (
+            c
+            for c in frame
+            if str(c).lower()
+            in {"filename", "file", "output_file", "result_file", "gold_file", "path"}
+        ),
+        None,
+    )
+    if id_col is None or file_col is None:
+        return {}
+    return {
+        str(qid).strip(): str(filename).strip()
+        for qid, filename in zip(frame[id_col], frame[file_col])
+        if str(qid).strip() and str(filename).strip()
+    }
+
+
+def expected_result_file(qid, gold_dir, manifest=None, allowed_extensions=None):
+    """Resolve one official result without allowing manifest path traversal."""
+    gold_dir = Path(gold_dir).resolve()
+    allowed = frozenset(allowed_extensions or DEFAULT_RESULT_EXTENSIONS)
+    manifest = manifest or {}
+    name = str(manifest.get(str(qid), "")).strip()
+    if name and Path(name).name == name and Path(name).suffix.lower() in allowed:
+        candidate = (gold_dir / name).resolve()
+        if candidate.parent == gold_dir and candidate.is_file():
+            return candidate
+    for extension in sorted(allowed):
+        candidate = gold_dir / (str(qid) + extension)
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def expanded_dataset_diagnostics(frame, gold_dir=None, manifest=None):
+    """Return compact validation facts for the expanded review workspace."""
+    result = {
+        "rows": int(len(frame)),
+        "duplicate_ids": int(frame["qid"].duplicated().sum()) if "qid" in frame else None,
+        "english_complete": int(frame["question_en"].astype(str).str.strip().ne("").sum())
+        if "question_en" in frame
+        else 0,
+        "chinese_complete": int(frame["question_zh"].astype(str).str.strip().ne("").sum())
+        if "question_zh" in frame
+        else 0,
+    }
+    if gold_dir is not None:
+        mapping = manifest if manifest is not None else load_gold_manifest(gold_dir)
+        result["official_results_found"] = sum(
+            expected_result_file(qid, gold_dir, mapping) is not None
+            for qid in frame["qid"].astype(str).tolist()
+        )
+    return result
