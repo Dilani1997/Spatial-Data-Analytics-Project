@@ -139,3 +139,29 @@ def load_expanded_questions(path):
     return frame
 
 
+def load_gold_manifest(gold_dir):
+    """Return qid -> safe result filename from `_manifest.csv` when available."""
+    gold_dir = Path(gold_dir).resolve()
+    path = gold_dir / "_manifest.csv"
+    if not path.is_file():
+        return {}
+    frame = pd.read_csv(path, dtype=str, keep_default_na=False, encoding="utf-8-sig")
+    id_col = next((c for c in frame if str(c).lower() in {"qid", "question_id", "id"}), None)
+    file_col = next(
+        (
+            c
+            for c in frame
+            if str(c).lower()
+            in {"filename", "file", "output_file", "result_file", "gold_file", "path"}
+        ),
+        None,
+    )
+    if id_col is None or file_col is None:
+        return {}
+    return {
+        str(qid).strip(): str(filename).strip()
+        for qid, filename in zip(frame[id_col], frame[file_col])
+        if str(qid).strip() and str(filename).strip()
+    }
+
+
