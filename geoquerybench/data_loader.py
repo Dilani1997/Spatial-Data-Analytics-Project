@@ -165,3 +165,20 @@ def load_gold_manifest(gold_dir):
     }
 
 
+def expected_result_file(qid, gold_dir, manifest=None, allowed_extensions=None):
+    """Resolve one official result without allowing manifest path traversal."""
+    gold_dir = Path(gold_dir).resolve()
+    allowed = frozenset(allowed_extensions or DEFAULT_RESULT_EXTENSIONS)
+    manifest = manifest or {}
+    name = str(manifest.get(str(qid), "")).strip()
+    if name and Path(name).name == name and Path(name).suffix.lower() in allowed:
+        candidate = (gold_dir / name).resolve()
+        if candidate.parent == gold_dir and candidate.is_file():
+            return candidate
+    for extension in sorted(allowed):
+        candidate = gold_dir / (str(qid) + extension)
+        if candidate.is_file():
+            return candidate
+    return None
+
+
