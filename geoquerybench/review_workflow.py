@@ -82,3 +82,17 @@ def display_verdict(verdict, flagged=False):
             '<span class="badge flag">🚩 Requires client clarification</span>',
             unsafe_allow_html=True,
         )
+
+EXPANDED_VERDICTS = (
+    "Not assessed",
+    "Pass",
+    "Fail",
+    "Needs clarification",
+)
+
+COMPLETED_VERDICTS = frozenset({"Pass", "Fail"})
+
+
+def verdict_is_complete(verdict):
+    """Identify terminal verdict labels; evidence must be validated separately."""
+    return str(verdict) in COMPLETED_VERDICTS
