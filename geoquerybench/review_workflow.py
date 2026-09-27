@@ -82,3 +82,63 @@ def display_verdict(verdict, flagged=False):
             '<span class="badge flag">🚩 Requires client clarification</span>',
             unsafe_allow_html=True,
         )
+
+EXPANDED_VERDICTS = (
+    "Not assessed",
+    "Pass",
+    "Fail",
+    "Needs clarification",
+)
+
+COMPLETED_VERDICTS = frozenset({"Pass", "Fail"})
+
+
+def verdict_is_complete(verdict):
+    """Identify terminal verdict labels; evidence must be validated separately."""
+    return str(verdict) in COMPLETED_VERDICTS
+
+def evidence_required(verdict):
+    """Require uploaded evidence for a Fail decision."""
+    return verdict == "Fail"
+
+
+def upload_visible(verdict):
+    """Show the evidence uploader for Fail or Needs clarification."""
+    return verdict in ("Fail", "Needs clarification")
+
+def review_errors(
+    verdict,
+    notes,
+    official_available,
+    has_upload,
+    pass_confirmed=False,
+):
+    """Return messages explaining why a review decision is not valid."""
+    if verdict not in EXPANDED_VERDICTS:
+        return ["Choose a valid verification decision."]
+
+    errors = []
+    explanation = "" if notes is None else str(notes).strip()
+
+    if verdict in COMPLETED_VERDICTS and not official_available:
+        errors.append(
+            "Official reference output is required for Pass or Fail. "
+            "Choose Needs clarification if it is missing."
+        )
+
+    if verdict == "Pass" and not pass_confirmed:
+        errors.append(
+            "Confirm you independently ran the query and checked "
+            "its output against the official result."
+        )
+
+    if evidence_required(verdict) and not has_upload:
+        errors.append("Upload the differing executed output as evidence.")
+
+    if verdict == "Fail" and not explanation:
+        errors.append("Describe the mismatch before saving Fail.")
+
+    if verdict == "Needs clarification" and not explanation:
+        errors.append("Describe what needs clarification.")
+
+    return errors
