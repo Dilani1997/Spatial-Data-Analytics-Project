@@ -182,3 +182,22 @@ def expected_result_file(qid, gold_dir, manifest=None, allowed_extensions=None):
     return None
 
 
+def expanded_dataset_diagnostics(frame, gold_dir=None, manifest=None):
+    """Return compact validation facts for the expanded review workspace."""
+    result = {
+        "rows": int(len(frame)),
+        "duplicate_ids": int(frame["qid"].duplicated().sum()) if "qid" in frame else None,
+        "english_complete": int(frame["question_en"].astype(str).str.strip().ne("").sum())
+        if "question_en" in frame
+        else 0,
+        "chinese_complete": int(frame["question_zh"].astype(str).str.strip().ne("").sum())
+        if "question_zh" in frame
+        else 0,
+    }
+    if gold_dir is not None:
+        mapping = manifest if manifest is not None else load_gold_manifest(gold_dir)
+        result["official_results_found"] = sum(
+            expected_result_file(qid, gold_dir, mapping) is not None
+            for qid in frame["qid"].astype(str).tolist()
+        )
+    return result
