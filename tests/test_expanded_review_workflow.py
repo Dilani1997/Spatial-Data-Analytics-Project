@@ -2,6 +2,8 @@ import unittest
 
 from geoquerybench.review_workflow import (
     EXPANDED_VERDICTS,
+    evidence_required,
+    upload_visible,
     verdict_is_complete,
 )
 
@@ -22,6 +24,32 @@ class ExpandedReviewPolicyTests(unittest.TestCase):
         for verdict in ("Not assessed", "Needs clarification", "", None, "Unknown"):
             with self.subTest(verdict=verdict):
                 self.assertFalse(verdict_is_complete(verdict))
+
+    def test_evidence_required_only_for_fail(self):
+        cases = (
+            ("Not assessed", False),
+            ("Pass", False),
+            ("Fail", True),
+            ("Needs clarification", False),
+            ("Unknown", False),
+            (None, False),
+        )
+        for verdict, expected in cases:
+            with self.subTest(verdict=verdict):
+                self.assertEqual(evidence_required(verdict), expected)
+
+    def test_upload_visibility_by_verdict(self):
+        cases = (
+            ("Not assessed", False),
+            ("Pass", False),
+            ("Fail", True),
+            ("Needs clarification", True),
+            ("Unknown", False),
+            (None, False),
+        )
+        for verdict, expected in cases:
+            with self.subTest(verdict=verdict):
+                self.assertEqual(upload_visible(verdict), expected)
 
 
 if __name__ == "__main__":

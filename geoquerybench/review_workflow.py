@@ -96,3 +96,12 @@ COMPLETED_VERDICTS = frozenset({"Pass", "Fail"})
 def verdict_is_complete(verdict):
     """Identify terminal verdict labels; evidence must be validated separately."""
     return str(verdict) in COMPLETED_VERDICTS
+
+def evidence_required(verdict):
+    """Require uploaded evidence for a Fail decision."""
+    return verdict == "Fail"
+
+
+def upload_visible(verdict):
+    """Show the evidence uploader for Fail or Needs clarification."""
+    return verdict in ("Fail", "Needs clarification")
