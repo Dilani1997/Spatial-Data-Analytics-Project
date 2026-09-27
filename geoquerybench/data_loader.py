@@ -100,3 +100,42 @@ def dataset_diagnostics(frame):
 def load_questions(path, modified_time):
     del modified_time  # Included in the cache key so replacing the file refreshes the app.
     return normalize_questions(pd.read_csv(path, encoding="utf-8-sig"))
+
+
+# --- Expanded 824-question workspace helpers (2026-09 update) ---
+EXPANDED_REQUIRED_COLUMNS = ("qid", "question_en", "question_zh", "gold_code")
+DEFAULT_RESULT_EXTENSIONS = frozenset({".csv", ".txt", ".json", ".geojson", ".png", ".jpg", ".jpeg"})
+
+
+def load_expanded_questions(path):
+    """Load the client expanded bilingual dataset using the stricter live-workspace rules.
+
+    Unlike the legacy normalizer, the expanded dataset requires both English and Chinese
+    question text for every row and preserves all source columns as strings.
+    """
+    frame = pd.read_csv(path, dtype=str, keep_default_na=False, encoding="utf-8-sig")
+    lowered = {str(column).strip().lower(): column for column in frame.columns}
+    rename_map = {}
+    for canonical, aliases in COLUMN_ALIASES.items():
+        if canonical in frame.columns:
+            continue
+        for alias in aliases:
+            key = alias.lower()
+            if key in lowered:
+                rename_map[lowered[key]] = canonical
+                break
+    frame = frame.rename(columns=rename_map)
+    missing = [column for column in EXPANDED_REQUIRED_COLUMNS if column not in frame.columns]
+    if missing:
+        raise ValueError("Missing columns: " + ", ".join(missing))
+
+    frame["qid"] = frame["qid"].astype(str).str.strip()
+    if frame["qid"].eq("").any() or frame["qid"].duplicated().any():
+        raise ValueError("Missing or duplicate question IDs: fix the supplied CSV before reviewing.")
+    if frame["question_en"].astype(str).str.strip().eq("").any() or frame[
+        "question_zh"
+    ].astype(str).str.strip().eq("").any():
+        raise ValueError("Every expanded case must contain English and Chinese text.")
+    return frame
+
+
