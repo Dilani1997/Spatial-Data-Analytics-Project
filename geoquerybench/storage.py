@@ -410,25 +410,39 @@ def expanded_database_path(database_file=None):
     return (STORAGE_DIRECTORY / "expanded_reviews.sqlite3").resolve()
 
 
+@contextmanager
 def expanded_database_connection(database_file=None):
+    """Open the expanded review database and always close it after use."""
     path = expanded_database_path(database_file)
     path.parent.mkdir(parents=True, exist_ok=True)
+
     connection = sqlite3.connect(path, timeout=15)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA busy_timeout=10000")
     connection.execute("PRAGMA journal_mode=WAL")
-    connection.execute(
-        "CREATE TABLE IF NOT EXISTS expanded_reviews ("
-        "qid TEXT NOT NULL, reviewer TEXT NOT NULL, verdict TEXT NOT NULL, "
-        "notes TEXT NOT NULL, uploaded_name TEXT, uploaded_sha256 TEXT, "
-        "updated_at TEXT NOT NULL, PRIMARY KEY(qid, reviewer))"
-    )
-    connection.execute(
-        "CREATE TABLE IF NOT EXISTS expanded_assignments ("
-        "qid TEXT PRIMARY KEY, reviewer TEXT NOT NULL)"
-    )
-    connection.commit()
-    return connection
+
+    try:
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS expanded_reviews ("
+            "qid TEXT NOT NULL, reviewer TEXT NOT NULL, verdict TEXT NOT NULL, "
+            "notes TEXT NOT NULL, uploaded_name TEXT, uploaded_sha256 TEXT, "
+            "updated_at TEXT NOT NULL, PRIMARY KEY(qid, reviewer))"
+        )
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS expanded_assignments ("
+            "qid TEXT PRIMARY KEY, reviewer TEXT NOT NULL)"
+        )
+        connection.commit()
+
+        yield connection
+        connection.commit()
+
+    except Exception:
+        connection.rollback()
+        raise
+
+    finally:
+        connection.close()
 
 
 def load_expanded_reviews(database_file=None):
