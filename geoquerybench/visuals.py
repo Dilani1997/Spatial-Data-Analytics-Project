@@ -6,7 +6,7 @@ import mimetypes
 import pandas as pd
 import streamlit as st
 
-from review_visuals import (
+from .review_visuals import (
     category_columns,
     column_profile,
     commodity_metric_columns,
@@ -29,7 +29,7 @@ def render_result_explorer(filename, mime, blob, key_prefix="result"):
         return
     filename = filename or "query-result"
     st.caption(
-        f"Verified query output: {filename} · {len(blob) / 1024:.1f} KB · "
+        f"Verified query output: {filename} Â· {len(blob) / 1024:.1f} KB Â· "
         "displayed only; no uploaded query or code is executed"
     )
     try:
@@ -51,7 +51,7 @@ def render_result_explorer(filename, mime, blob, key_prefix="result"):
             with controls_left:
                 if metric_columns:
                     chosen_metric = st.selectbox(
-                        "⛏️ Gold, copper or numeric measure",
+                        "â›ï¸ Gold, copper or numeric measure",
                         metric_columns,
                         format_func=friendly_metric,
                         key=f"{key_prefix}_metric",
@@ -63,7 +63,7 @@ def render_result_explorer(filename, mime, blob, key_prefix="result"):
             category_options = category_columns(frame)
             with controls_middle:
                 selected_category = st.selectbox(
-                    "🧩 Optional category filter",
+                    "ðŸ§© Optional category filter",
                     ["None"] + category_options,
                     key=f"{key_prefix}_category",
                 )
@@ -111,7 +111,7 @@ def render_result_explorer(filename, mime, blob, key_prefix="result"):
                 chart_options.append("Map")
             with controls_right:
                 chart_mode = st.selectbox(
-                    "📊 Output view", chart_options,
+                    "ðŸ“Š Output view", chart_options,
                     key=f"{key_prefix}_chart_mode",
                 )
 
@@ -124,11 +124,11 @@ def render_result_explorer(filename, mime, blob, key_prefix="result"):
                 values = pd.to_numeric(filtered_frame[chosen_metric], errors="coerce")
                 result_metrics[3].metric(
                     f"Average {chosen_metric}",
-                    f"{values.mean():,.3g}" if values.notna().any() else "—",
+                    f"{values.mean():,.3g}" if values.notna().any() else "â€”",
                 )
             else:
                 result_metrics[3].metric(
-                    "Mapped points", f"{len(filtered_frame):,}" if latitude else "—"
+                    "Mapped points", f"{len(filtered_frame):,}" if latitude else "â€”"
                 )
 
             if chart_mode == "Map" and latitude and longitude:
@@ -140,7 +140,7 @@ def render_result_explorer(filename, mime, blob, key_prefix="result"):
                 if map_frame.empty:
                     st.info("No valid latitude/longitude pairs remain after filtering.")
                 else:
-                    st.caption(f"Point map · {len(map_frame):,} valid coordinates")
+                    st.caption(f"Point map Â· {len(map_frame):,} valid coordinates")
                     st.map(map_frame)
             elif chart_mode == "Bar chart":
                 categories = category_columns(filtered_frame)
@@ -177,7 +177,7 @@ def render_result_explorer(filename, mime, blob, key_prefix="result"):
                         )
                         value_title = f"{bar_aggregation.split()[0]} {chosen_metric}"
                     chart_frame = chart_frame.sort_values("Value", ascending=False).head(30)
-                    st.caption("Ranked comparison · top 30 categories after filtering")
+                    st.caption("Ranked comparison Â· top 30 categories after filtering")
                     st.vega_lite_chart(
                         chart_frame,
                         {
@@ -252,7 +252,7 @@ def render_result_explorer(filename, mime, blob, key_prefix="result"):
                 if pie_frame.empty:
                     st.info("No positive values are available for this part-to-whole view.")
                 else:
-                    st.caption("Part-to-whole view · smaller categories are combined as Other")
+                    st.caption("Part-to-whole view Â· smaller categories are combined as Other")
                     st.vega_lite_chart(
                         pie_frame,
                         {
@@ -289,7 +289,7 @@ def render_result_explorer(filename, mime, blob, key_prefix="result"):
                         "Value": pd.to_numeric(filtered_frame[chosen_metric], errors="coerce"),
                     }
                 ).dropna().head(1000).sort_values("X")
-                st.caption("Trend view · first 1,000 complete records after filtering")
+                st.caption("Trend view Â· first 1,000 complete records after filtering")
                 st.vega_lite_chart(
                     line_frame,
                     {
@@ -320,7 +320,7 @@ def render_result_explorer(filename, mime, blob, key_prefix="result"):
                     st.info("No numeric values remain for this distribution.")
                 else:
                     st.caption(
-                        f"Distribution of {friendly_metric(chosen_metric)} · "
+                        f"Distribution of {friendly_metric(chosen_metric)} Â· "
                         f"{len(histogram_frame):,} non-missing values"
                     )
                     st.vega_lite_chart(
@@ -361,7 +361,7 @@ def render_result_explorer(filename, mime, blob, key_prefix="result"):
                 if box_frame.empty:
                     st.info("No numeric values remain for this spread comparison.")
                 else:
-                    st.caption("Spread and outliers · box shows the middle 50% of values")
+                    st.caption("Spread and outliers Â· box shows the middle 50% of values")
                     st.vega_lite_chart(
                         box_frame,
                         {
@@ -418,7 +418,7 @@ def render_result_explorer(filename, mime, blob, key_prefix="result"):
                     st.dataframe(scatter_frame, width="stretch", hide_index=True)
                 else:
                     st.caption(
-                        f"Relationship view · {len(scatter_frame):,} complete pairs; "
+                        f"Relationship view Â· {len(scatter_frame):,} complete pairs; "
                         "look for clusters, outliers and non-linear patterns"
                     )
                     color_encoding = (
@@ -458,7 +458,7 @@ def render_result_explorer(filename, mime, blob, key_prefix="result"):
                     )
                 else:
                     st.caption(
-                        "Linear association from −1 to +1 · correlation is exploratory and does not prove causation"
+                        "Linear association from âˆ’1 to +1 Â· correlation is exploratory and does not prove causation"
                     )
                     st.vega_lite_chart(
                         correlation_frame,
@@ -505,7 +505,7 @@ def render_result_explorer(filename, mime, blob, key_prefix="result"):
             else:
                 st.dataframe(filtered_frame, width="stretch", hide_index=True)
 
-            with st.expander("🔎 Data profile and summary"):
+            with st.expander("ðŸ”Ž Data profile and summary"):
                 st.caption(
                     "Use this profile to spot missing values, low-cardinality fields and suspicious ranges "
                     "before accepting a visual conclusion."

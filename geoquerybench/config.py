@@ -3,14 +3,14 @@
 from pathlib import Path
 import os
 
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.3.0-modular"
 APP_DIRECTORY = Path(__file__).resolve().parent.parent
 DATA_DIRECTORY = APP_DIRECTORY / "data"
 DATA_FILE_CANDIDATES = [
     DATA_DIRECTORY / "geoquerybench_questions.csv",
     DATA_DIRECTORY / "geoquerybench_seed_pairs_v0.1.csv",
 ]
-configured_storage = Path(os.getenv("GQB_STORAGE_DIR", ".")).expanduser()
+configured_storage = Path(os.getenv("GQB_STORAGE_DIR", "runtime")).expanduser()
 STORAGE_DIRECTORY = (
     configured_storage if configured_storage.is_absolute()
     else APP_DIRECTORY / configured_storage
@@ -31,7 +31,7 @@ TEAM_MEMBERS = [
 
 ASSESSMENT_OPTIONS = ["Not assessed", "Pass", "Fail"]
 VERDICT_OPTIONS = ["Not assessed", "Pass", "Fail"]
-REVIEW_MODES = ["Standard single review", "Agreement sample (2–3 reviewers)"]
+REVIEW_MODES = ["Standard single review", "Agreement sample (2â€“3 reviewers)"]
 
 QUALITY_GUIDE = [
     {

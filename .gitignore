@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.DS_Store
+.env
+.env.*
+runtime/*
+!runtime/.gitkeep
+storage/
+*.sqlite
+*.sqlite3
+*.db
+# Keep data directory itself but do not accidentally commit local/client datasets by default.
+data/*
+!data/README.md

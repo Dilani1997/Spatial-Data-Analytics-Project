@@ -15,6 +15,6 @@ jobs:
           python-version: "3.12"
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -r requirements.txt
+      - run: python -m compileall -q app.py geoquerybench tests smoke_test.py
       - run: python -m unittest discover -s tests -v
-      - run: python -m unittest test_review_visuals.py -v
       - run: python smoke_test.py

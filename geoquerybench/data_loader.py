@@ -6,7 +6,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from review_visuals import commodity_tags
+from .review_visuals import commodity_tags
 from .config import APP_DIRECTORY, COLUMN_ALIASES, DATA_FILE_CANDIDATES
 
 
