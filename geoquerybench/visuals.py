@@ -1,9 +1,12 @@
 """Interactive query-output explorer. Owner: Thomas."""
 
+from pathlib import Path
+import mimetypes
+
 import pandas as pd
 import streamlit as st
 
-from review_visuals import (
+from .review_visuals import (
     category_columns,
     column_profile,
     commodity_metric_columns,
@@ -523,3 +526,31 @@ def render_result_explorer(filename, mime, blob, key_prefix="result"):
 def render_evidence(filename, mime, blob):
     """Backward-compatible wrapper used by stored-review previews."""
     render_result_explorer(filename, mime, blob, key_prefix="stored_result")
+
+
+# --- Expanded result preview safety (2026-09 update) ---
+SUPPORTED_RESULT_EXTENSIONS = frozenset({".csv", ".txt", ".json", ".geojson", ".png", ".jpg", ".jpeg"})
+MAX_RESULT_PREVIEW_BYTES = 10 * 1024 * 1024
+
+
+def validate_result_blob(filename, blob, maximum_bytes=MAX_RESULT_PREVIEW_BYTES):
+    """Validate one display-only result payload before Streamlit renders it."""
+    suffix = Path(str(filename or "")).suffix.lower()
+    if suffix not in SUPPORTED_RESULT_EXTENSIONS:
+        raise ValueError("Unsupported result file type.")
+    if not blob:
+        raise ValueError("Result file is empty.")
+    if len(blob) > int(maximum_bytes):
+        raise ValueError("Result file exceeds the 10 MB preview limit.")
+    return suffix
+
+
+def render_expanded_result(path_or_bytes, filename, key_prefix="expanded_result"):
+    """Render the same safe result types used by the current expanded workspace."""
+    raw = path_or_bytes.read_bytes() if isinstance(path_or_bytes, Path) else bytes(path_or_bytes)
+    suffix = validate_result_blob(filename, raw)
+    if suffix in {".png", ".jpg", ".jpeg"}:
+        st.image(raw, caption=filename, width="stretch")
+        return
+    mime = mimetypes.guess_type(str(filename))[0] or "application/octet-stream"
+    render_result_explorer(filename, mime, raw, key_prefix=key_prefix)
