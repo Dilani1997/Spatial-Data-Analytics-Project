@@ -46,6 +46,7 @@ from geoquerybench.storage import (
     save_expanded_review,
 )
 from geoquerybench.visuals import render_expanded_result
+from geoquerybench.review_visuals import csv_result_diagnostics
 
 
 ROOT = Path(__file__).resolve().parent
@@ -243,13 +244,72 @@ def _review_tab(questions, manifest, reviews, assignments, reviewer):
                 key=f"upload_{qid}_{reviewer}",
             )
             if upload is not None:
-                try:
-                    render_expanded_result(
-                        upload.getvalue(), upload.name, key_prefix=f"executed_{qid}"
-                    )
-                except ValueError as exc:
-                    st.error(str(exc))
-                    upload = None
+                # try:
+                #     render_expanded_result(
+                #         upload.getvalue(), upload.name, key_prefix=f"executed_{qid}"
+                #     )
+                # except ValueError as exc:
+                #     st.error(str(exc))
+                #     upload = None
+                if upload is not None:
+                    try:
+                        uploaded_bytes = upload.getvalue()
+                        render_expanded_result(
+                            uploaded_bytes,
+                            upload.name,
+                            key_prefix=f"executed_{qid}",
+                        )
+                    except ValueError as exc:
+                        st.error(str(exc))
+                        upload = None
+
+                    if upload is not None and Path(upload.name).suffix.lower() == ".csv":
+                        try:
+                            diagnostics = csv_result_diagnostics(uploaded_bytes)
+                        except Exception:
+                            st.warning(
+                                "The CSV preview is available, but the data-quality checks "
+                                "could not read this file. The upload is still available for review."
+                            )
+                        else:
+                            st.markdown("**CSV data-quality checks**")
+                            st.caption(
+                                "Checks cover the full uploaded file. Negative values are "
+                                "flags for reviewer inspection, not automatic errors."
+                            )
+
+                            check_cols = st.columns(4)
+                            check_cols[0].metric("Rows", f"{diagnostics['rows']:,}")
+                            check_cols[1].metric("Columns", f"{len(diagnostics['columns']):,}")
+                            check_cols[2].metric("Missing cells", f"{diagnostics['missing_cells']:,}")
+                            check_cols[3].metric(
+                                "Exact duplicate rows",
+                                f"{diagnostics['duplicate_rows']:,}",
+                            )
+
+                            numeric_findings = [
+                                {
+                                    "Column": column,
+                                    "-9999 values": counts["sentinel_count"],
+                                    "Negative values": counts["negative_count"],
+                                    "Other negatives": counts["other_negative_count"],
+                                }
+                                for column, counts in diagnostics["numeric_columns"].items()
+                                if counts["sentinel_count"] or counts["negative_count"]
+                            ]
+
+                            if numeric_findings:
+                                st.dataframe(
+                                    pd.DataFrame(numeric_findings),
+                                    hide_index=True,
+                                    use_container_width=True,
+                                )
+                            elif diagnostics["numeric_columns"]:
+                                st.success(
+                                    "No -9999 values or negative values found in numeric columns."
+                                )
+                            else:
+                                st.info("No numeric columns were detected for these checks.")
         else:
             st.caption("Upload is hidden for matching output to save review time.")
 

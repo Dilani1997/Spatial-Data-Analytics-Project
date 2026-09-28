@@ -80,6 +80,30 @@ def parse_result_evidence(filename: str, blob: bytes) -> tuple[pd.DataFrame, dic
         return pd.DataFrame(), payload
     return pd.DataFrame(), None
 
+def csv_result_diagnostics(blob: bytes) -> dict:
+    """Summarize data-quality signals across the complete uploaded CSV."""
+    frame = pd.read_csv(BytesIO(blob))
+    numeric = {}
+
+    for column in frame.select_dtypes(include="number").columns:
+        values = pd.to_numeric(frame[column], errors="coerce")
+        sentinel_count = int(values.eq(-9999).sum())
+        negative_count = int(values.lt(0).sum())
+
+        numeric[str(column)] = {
+            "sentinel_count": sentinel_count,
+            "negative_count": negative_count,
+            "other_negative_count": negative_count - sentinel_count,
+        }
+
+    return {
+        "rows": int(len(frame)),
+        "columns": [str(column) for column in frame.columns],
+        "missing_cells": int(frame.isna().sum().sum()),
+        "duplicate_rows": int(frame.duplicated().sum()),
+        "numeric_columns": numeric,
+    }
+
 
 def numeric_columns(frame: pd.DataFrame) -> list[str]:
     return [
