@@ -1,7 +1,13 @@
 """SQLite persistence, history, assignments and backups. Owner: Ziyue."""
 
-from datetime import datetime
+from contextlib import contextmanager
+from datetime import datetime, timezone
+from pathlib import Path
+import hashlib
+import os
+import re
 import sqlite3
+import uuid
 
 import pandas as pd
 
@@ -26,7 +32,9 @@ def storage_diagnostics():
         "database_bytes": DATABASE_FILE.stat().st_size if DATABASE_FILE.exists() else 0,
     }
 
+@contextmanager
 def database_connection():
+    """Open a configured SQLite connection and always close it after use."""
     STORAGE_DIRECTORY.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(DATABASE_FILE, timeout=15)
     connection.row_factory = sqlite3.Row
@@ -34,7 +42,14 @@ def database_connection():
     connection.execute("PRAGMA synchronous=NORMAL")
     connection.execute("PRAGMA busy_timeout=10000")
     connection.execute("PRAGMA foreign_keys=ON")
-    return connection
+    try:
+        yield connection
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
 
 def table_exists(connection, table_name):
     return connection.execute(
@@ -188,8 +203,13 @@ def backup_database():
     BACKUP_DIRECTORY.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     destination = BACKUP_DIRECTORY / f"annotations_{stamp}.db"
-    with sqlite3.connect(DATABASE_FILE) as source, sqlite3.connect(destination) as target:
+    source = sqlite3.connect(DATABASE_FILE)
+    target = sqlite3.connect(destination)
+    try:
         source.backup(target)
+    finally:
+        target.close()
+        source.close()
     return destination
 
 def load_reviews():
@@ -371,3 +391,158 @@ def save_adjudication(qid, adjudicator, verdict, notes):
             (qid, adjudicator, verdict, notes, now),
         )
     backup_database()
+
+
+# --- Expanded workspace storage and evidence (2026-09 update) ---
+EXPANDED_ALLOWED_EXTENSIONS = frozenset({".csv", ".txt", ".json", ".geojson", ".png", ".jpg", ".jpeg"})
+EXPANDED_MAX_BYTES = 10 * 1024 * 1024
+
+
+def expanded_database_path(database_file=None):
+    if database_file is not None:
+        return Path(database_file).expanduser().resolve()
+    configured = os.getenv("GQB_EXPANDED_DB", "").strip()
+    if configured:
+        candidate = Path(configured).expanduser()
+        if not candidate.is_absolute():
+            candidate = STORAGE_DIRECTORY / candidate
+        return candidate.resolve()
+    return (STORAGE_DIRECTORY / "expanded_reviews.sqlite3").resolve()
+
+
+def expanded_database_connection(database_file=None):
+    path = expanded_database_path(database_file)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(path, timeout=15)
+    connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA busy_timeout=10000")
+    connection.execute("PRAGMA journal_mode=WAL")
+    connection.execute(
+        "CREATE TABLE IF NOT EXISTS expanded_reviews ("
+        "qid TEXT NOT NULL, reviewer TEXT NOT NULL, verdict TEXT NOT NULL, "
+        "notes TEXT NOT NULL, uploaded_name TEXT, uploaded_sha256 TEXT, "
+        "updated_at TEXT NOT NULL, PRIMARY KEY(qid, reviewer))"
+    )
+    connection.execute(
+        "CREATE TABLE IF NOT EXISTS expanded_assignments ("
+        "qid TEXT PRIMARY KEY, reviewer TEXT NOT NULL)"
+    )
+    connection.commit()
+    return connection
+
+
+def load_expanded_reviews(database_file=None):
+    with expanded_database_connection(database_file) as connection:
+        return pd.read_sql_query(
+            "SELECT qid,reviewer,verdict,notes,uploaded_name,uploaded_sha256,updated_at "
+            "FROM expanded_reviews ORDER BY qid, reviewer",
+            connection,
+        )
+
+
+def load_expanded_assignments(database_file=None):
+    with expanded_database_connection(database_file) as connection:
+        return dict(connection.execute("SELECT qid, reviewer FROM expanded_assignments").fetchall())
+
+
+def save_expanded_review(
+    qid,
+    reviewer,
+    verdict,
+    notes,
+    uploaded_name=None,
+    uploaded_sha256=None,
+    database_file=None,
+):
+    now = datetime.now(timezone.utc).isoformat()
+    with expanded_database_connection(database_file) as connection:
+        connection.execute(
+            "INSERT INTO expanded_reviews "
+            "(qid,reviewer,verdict,notes,uploaded_name,uploaded_sha256,updated_at) "
+            "VALUES (?,?,?,?,?,?,?) "
+            "ON CONFLICT(qid,reviewer) DO UPDATE SET "
+            "verdict=excluded.verdict,notes=excluded.notes,"
+            "uploaded_name=excluded.uploaded_name,uploaded_sha256=excluded.uploaded_sha256,"
+            "updated_at=excluded.updated_at",
+            (
+                str(qid),
+                str(reviewer),
+                str(verdict),
+                str(notes).strip(),
+                uploaded_name,
+                uploaded_sha256,
+                now,
+            ),
+        )
+        connection.commit()
+    return now
+
+
+def save_expanded_assignment(qid, reviewer, database_file=None):
+    with expanded_database_connection(database_file) as connection:
+        connection.execute(
+            "INSERT INTO expanded_assignments(qid,reviewer) VALUES (?,?) "
+            "ON CONFLICT(qid) DO UPDATE SET reviewer=excluded.reviewer",
+            (str(qid), str(reviewer)),
+        )
+        connection.commit()
+
+
+def assign_unassigned_evenly(question_ids, reviewers, database_file=None):
+    reviewers = [str(name) for name in reviewers if str(name).strip()]
+    if not reviewers:
+        return 0
+    with expanded_database_connection(database_file) as connection:
+        existing = dict(connection.execute("SELECT qid, reviewer FROM expanded_assignments").fetchall())
+        counts = {name: sum(owner == name for owner in existing.values()) for name in reviewers}
+        added = 0
+        for qid in [str(value) for value in question_ids if str(value) not in existing]:
+            member = min(reviewers, key=lambda name: (counts[name], reviewers.index(name)))
+            connection.execute(
+                "INSERT OR IGNORE INTO expanded_assignments(qid,reviewer) VALUES (?,?)",
+                (qid, member),
+            )
+            counts[member] += 1
+            added += 1
+        connection.commit()
+    return added
+
+
+def expanded_evidence_directory(database_file=None, evidence_dir=None):
+    if evidence_dir is not None:
+        return Path(evidence_dir).expanduser().resolve()
+    return expanded_database_path(database_file).parent / "evidence"
+
+
+def expanded_evidence_path(digest, original_name, database_file=None, evidence_dir=None):
+    suffix = Path(str(original_name or "")).suffix.lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", str(digest or "")):
+        return None
+    if suffix not in EXPANDED_ALLOWED_EXTENSIONS:
+        return None
+    return expanded_evidence_directory(database_file, evidence_dir) / (str(digest) + suffix)
+
+
+def persist_expanded_evidence(
+    original_name,
+    raw,
+    database_file=None,
+    evidence_dir=None,
+    maximum_bytes=EXPANDED_MAX_BYTES,
+):
+    raw = bytes(raw)
+    if not raw or len(raw) > int(maximum_bytes):
+        raise ValueError("Uploaded evidence must be nonempty and no larger than 10 MB.")
+    digest = hashlib.sha256(raw).hexdigest()
+    path = expanded_evidence_path(digest, original_name, database_file, evidence_dir)
+    if path is None:
+        raise ValueError("Unsupported evidence file type.")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.exists():
+        temporary = path.parent / ("." + uuid.uuid4().hex + ".tmp")
+        try:
+            temporary.write_bytes(raw)
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
+    return str(original_name), digest, path
