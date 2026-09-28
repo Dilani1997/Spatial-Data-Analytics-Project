@@ -6,7 +6,7 @@ import mimetypes
 import pandas as pd
 import streamlit as st
 
-from .review_visuals import (
+from review_visuals import (
     category_columns,
     column_profile,
     commodity_metric_columns,
