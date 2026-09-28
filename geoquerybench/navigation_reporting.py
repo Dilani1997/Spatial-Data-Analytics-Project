@@ -191,3 +191,75 @@ def load_demo_question(target_qid, reviewer):
     if reviewer:
         apply_demo_values(target_qid, reviewer)
     st.session_state["flash_message"] = "Demonstration example loaded."
+
+
+# --- Expanded reviewer navigation (2026-09 update) ---
+EXPANDED_COMPLETED = frozenset({"Pass", "Fail"})
+STATUS_FILTERS = ("All", "Pending", "Unreviewed", "Pass", "Fail", "Needs clarification")
+
+
+def reviewer_statuses(review_rows, reviewer):
+    """Return qid -> verdict for only the selected reviewer."""
+    return {
+        str(row["qid"]): str(row["verdict"])
+        for row in review_rows
+        if str(row.get("reviewer", "")) == reviewer
+    }
+
+
+def assigned_ids(question_ids, assignments, reviewer):
+    return [qid for qid in question_ids if assignments.get(qid) == reviewer]
+
+
+def visible_ids(question_ids, statuses, status_filter="All"):
+    if status_filter not in STATUS_FILTERS:
+        raise ValueError("Invalid review-status filter")
+    if status_filter == "All":
+        return list(question_ids)
+    if status_filter == "Unreviewed":
+        return [
+            qid
+            for qid in question_ids
+            if qid not in statuses or statuses[qid] == "Not assessed"
+        ]
+    if status_filter == "Pending":
+        return [qid for qid in question_ids if statuses.get(qid) not in EXPANDED_COMPLETED]
+    return [qid for qid in question_ids if statuses.get(qid) == status_filter]
+
+
+def next_pending_assigned(question_ids, assignments, reviewer, statuses, current_id=None):
+    """Return the next unfinished assigned qid after current_id, wrapping once."""
+    own_ids = assigned_ids(question_ids, assignments, reviewer)
+    if not own_ids:
+        return None
+    start = (own_ids.index(current_id) + 1) % len(own_ids) if current_id in own_ids else 0
+    for offset in range(len(own_ids)):
+        candidate = own_ids[(start + offset) % len(own_ids)]
+        if statuses.get(candidate) not in EXPANDED_COMPLETED:
+            return candidate
+    return None
+
+
+def resume_pending(question_ids, assignments, reviewer, statuses, review_rows):
+    """Resume after the reviewer's latest saved assigned case, or first pending case."""
+    own = set(assigned_ids(question_ids, assignments, reviewer))
+    if not own:
+        return None
+    latest = max(
+        (
+            row
+            for row in review_rows
+            if row.get("reviewer") == reviewer
+            and row.get("qid") in own
+            and row.get("updated_at")
+        ),
+        key=lambda row: str(row["updated_at"]),
+        default=None,
+    )
+    return next_pending_assigned(
+        question_ids,
+        assignments,
+        reviewer,
+        statuses,
+        latest["qid"] if latest else None,
+    )
