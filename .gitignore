@@ -1,0 +1,16 @@
+*
+!.gitignore
+!README.md
+!run_assigned_validation.ps1
+!manual_validation/
+manual_validation/*
+!manual_validation/validate_geopandas.py
+!manual_validation/validate_python.py
+!manual_validation/validate_refusal.py
+!manual_validation/validate_sql.py
+!manual_validation/validate_viz.py
+!manual_validation/secondary_validation/
+manual_validation/secondary_validation/*
+!manual_validation/secondary_validation/validate_CD2_025.py
+!manual_validation/secondary_validation/validate_CD4_047.py
+!manual_validation/secondary_validation/validate_NS3_020.py
