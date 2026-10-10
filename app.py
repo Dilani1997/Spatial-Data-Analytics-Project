@@ -47,7 +47,9 @@ from geoquerybench.storage import (
 )
 from geoquerybench.visuals import render_expanded_result
 from geoquerybench.review_visuals import csv_result_diagnostics
-
+from geoquerybench.user_features import render_query_accuracy, render_nl_to_sql
+from geoquerybench.query_result_accuracy import render_result_accuracy
+from geoquerybench.model_comparison import render_model_comparison
 
 ROOT = Path(__file__).resolve().parent
 QUESTIONS_PATH = Path(
@@ -490,16 +492,41 @@ def main():
     if reviewer == "Guest reviewer":
         st.sidebar.warning("Select your name to save a review.")
 
-    review_tab, assignment_tab, progress_tab = st.tabs(
-        ["🔍 Question verification", "👥 Assignments", "📊 Progress and export"]
+    review_tab, assignment_tab, progress_tab, accuracy_tab, sql_tab, result_tab, comparison_tab = st.tabs(
+        [
+            "🔍 Question verification",
+            "👥 Assignments",
+            "📊 Progress and export",
+            "🎯 Query accuracy",
+            "💬 Natural language → SQL",
+            "📏 Result accuracy",
+            "⚖️ Model comparison",
+        ]
     )
+
     with review_tab:
         _review_tab(questions, manifest, reviews, assignments, reviewer)
+
     with assignment_tab:
         _assignment_tab(questions, assignments, reviewer)
+
     with progress_tab:
         _progress_tab(questions, reviews, assignments)
 
+    with accuracy_tab:
+        render_query_accuracy(reviews, questions)
 
-if __name__ == "__main__":
-    main()
+    with sql_tab:
+        render_nl_to_sql(questions)
+
+    with result_tab:
+        render_result_accuracy(
+            questions,
+            manifest,
+            GOLD_DIR,
+            lambda qid, manifest: expected_result_file(qid, GOLD_DIR, manifest),
+            reviews,
+        )
+
+    with comparison_tab:
+        render_model_comparison(questions)
